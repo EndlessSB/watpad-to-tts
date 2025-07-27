@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import tkinter as tk
 from tkinter import simpledialog, Tk, messagebox, ttk
 import threading
+import sys
 
 ui = True
 
@@ -100,7 +101,22 @@ def extract_chapter_number(url):
 
 def main():
     global ui
-    ui = ask_ui_mode()
+    # Default to UI mode
+    ui = True
+
+    # Check for optional override arguments
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].lower()
+        if arg == "-gui":
+            ui = True
+        elif arg == "-no-gui":
+            ui = False
+        elif arg == "-options":
+            ui = ask_ui_mode()
+        else:
+            print(f"[!] Unknown argument: {arg}")
+            print("Usage: python main.py [-gui | -no-gui | -options]")
+            sys.exit(1)
 
     if ui:
         # Initialize the UI
