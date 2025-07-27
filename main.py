@@ -4,6 +4,11 @@ import pyttsx3
 import time
 import re
 from urllib.parse import urlparse
+import tkinter as tk
+from tkinter import simpledialog, Tk, messagebox, ttk
+import threading
+
+ui = True
 
 def get_wattpad_text(url):
     headers = {
@@ -35,6 +40,29 @@ def get_next_chapter_url(soup, current_chapter_number):
                 href = "https://www.wattpad.com" + href
             return href
     return None
+
+def ask_ui_mode():
+    """Ask user for UI or Console mode using both Tkinter and CLI as fallback."""
+    mode_selected = {"ui": None}
+
+    def prompt():
+        nonlocal mode_selected
+        root = tk.Tk()
+        root.withdraw()
+        answer = messagebox.askyesno("Mode Selection", "Would you like to use UI mode?")
+        mode_selected["ui"] = answer
+        root.destroy()
+
+    thread = threading.Thread(target=prompt)
+    thread.start()
+    thread.join()
+
+    if mode_selected["ui"] is None:
+        # Fallback to console
+        resp = input("Would you like to use UI mode? (y/n): ").strip().lower()
+        mode_selected["ui"] = resp == 'y'
+
+    return mode_selected["ui"]
 
 def text_to_speech_combined(text, filename="wattpad_story.wav", voice_name="David", rate=150):
     engine = pyttsx3.init()
@@ -71,11 +99,32 @@ def extract_chapter_number(url):
     return 1  # fallback if not found
 
 def main():
-    print("Enter the starting Wattpad chapter URL (preferably page 1 or no page specified):")
-    url = input("Starting URL: ").strip()
-    original_chapter_num = extract_chapter_number(url)
+    global ui
+    ui = ask_ui_mode()
 
-    max_chapters = input("How many chapters to fetch? (Enter 0 for all available): ").strip()
+    if ui:
+        # Initialize the UI
+        root = tk.Tk()
+        root.title("Wattpad Chapter Fetcher")
+
+        # Create and place a progress bar
+        progress = ttk.Progressbar(root, length=300, mode='determinate')
+        progress.pack(padx=20, pady=20)
+
+        root.update()
+        root.withdraw()  # Hide initially for input dialogs
+
+        url = simpledialog.askstring("Wattpad URL", "Please enter the Wattpad URL.")
+        original_chapter_num = extract_chapter_number(url)
+
+        max_chapters = simpledialog.askstring("Chapters", "How many chapters to fetch? (Enter 0 for all available)")
+    else:
+        print("Enter the starting Wattpad chapter URL (preferably page 1 or no page specified):")
+        url = input("Starting URL: ").strip()
+        original_chapter_num = extract_chapter_number(url)
+
+        max_chapters = input("How many chapters to fetch? (Enter 0 for all available): ").strip()
+
     try:
         max_chapters = int(max_chapters)
         if max_chapters < 0:
@@ -88,6 +137,12 @@ def main():
     current_url = url
     chapter_count = 0
     current_chapter_num = original_chapter_num
+
+    if ui:
+        root.deiconify()
+        progress["maximum"] = max_chapters if max_chapters != 0 else 100
+        progress["value"] = 0
+        root.update()
 
     while current_url:
         chapter_count += 1
@@ -108,6 +163,8 @@ def main():
             except Exception as e:
                 if page_num == 1:
                     print(f"[!] Failed to fetch chapter {chapter_count} first page: {e}")
+                    if ui:
+                        messagebox.showerror("Error", f"Failed to fetch chapter {chapter_count}.\n\n{e}")
                     return
                 else:
                     print(f"    [*] Error or no more pages at page {page_num}: {e}")
@@ -119,6 +176,10 @@ def main():
             combined_text += f"\n\n[Chapter {chapter_count}]\n{chapter_text_full.strip()}"
         else:
             print(f"[!] Chapter {chapter_count} had no content. Skipping.")
+
+        if ui:
+            progress["value"] = chapter_count
+            root.update()
 
         if max_chapters != 0 and chapter_count >= max_chapters:
             print("[*] Reached the requested number of chapters.")
@@ -136,8 +197,17 @@ def main():
     if combined_text.strip():
         print("[*] Converting combined chapters to speech...")
         text_to_speech_combined(combined_text, filename="wattpad_story.wav")
+        if ui:
+            messagebox.showinfo("Done", "Chapters converted to speech successfully!")
     else:
         print("[!] No text to convert.")
+        if ui:
+            messagebox.showwarning("No Content", "No chapter text was found.")
+
+    if ui:
+        root.destroy()
+
 
 if __name__ == "__main__":
+    ui = True  # Or False depending on mode
     main()
